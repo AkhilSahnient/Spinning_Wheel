@@ -11,7 +11,7 @@ const PORT = process.env.PORT || 5000;
 
 // CORS configuration
 app.use(cors({
-    origin: true, // allows any origin dynamically
+    origin: true, 
     credentials: true
 }));
 
