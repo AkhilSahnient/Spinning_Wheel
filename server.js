@@ -100,7 +100,7 @@ async function createCoupon(prize, email) {
     }
     
     const code = `SPIN-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
-    const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+   const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toUTCString();
     
         const couponPayload = {
         name: `Spin Wheel - ${prize}`,
@@ -227,7 +227,7 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
         }
 
         const code = 'SPIN-' + Math.random().toString(36).substring(2, 8).toUpperCase();
-        const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+        const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toUTCString();
 
         await axios.post(
             `https://api.bigcommerce.com/stores/${BC_STORE_HASH}/v2/coupons`,
