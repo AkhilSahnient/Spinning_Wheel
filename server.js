@@ -102,24 +102,28 @@ async function createCoupon(prize, email) {
     const code = `SPIN-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
     const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     
-    const couponData = {
-        name: `Spin Wheel - ${prize} for ${email}`,
-        code,
+        const couponPayload = {
+        name: `Spin Wheel - ${prize}`,
+        code: code,
         type: couponType,
+        min_purchase: '100.00',
         enabled: true,
         max_uses: 1,
         max_uses_per_customer: 1,
-        min_purchase: '100.00', // This ensures coupon only works on $100+ carts
-        expires: expiry
-    };
-    
-    if (couponType !== 'free_shipping') {
-        couponData.amount = discountValue.toString();
-    }
+        expires: expiry,
+        applies_to: {
+            entity: 'categories',
+            ids: []
+        }
+        };
+
+if (couponType !== 'free_shipping') {
+  couponPayload.amount = discountValue.toString();
+}
     
     const response = await axios.post(
         `https://api.bigcommerce.com/stores/${BC_STORE_HASH}/v2/coupons`,
-        couponData,
+        couponPayload,
         {
             headers: {
                 'X-Auth-Token': BC_API_TOKEN,
@@ -238,8 +242,8 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
                     max_uses_per_customer: 1,
                     expires: expiry,
                     applies_to: {
-                        entity: 'categories',
-                        ids: [] // empty = applies to ALL products
+                    entity: 'categories',
+                    ids: []
                     }
                 },
             { 
