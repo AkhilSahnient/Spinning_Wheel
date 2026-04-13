@@ -227,7 +227,7 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
         }
 
         const code = 'SPIN-' + Math.random().toString(36).substring(2, 8).toUpperCase();
-        const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
         await axios.post(
             `https://api.bigcommerce.com/stores/${BC_STORE_HASH}/v2/coupons`,
@@ -242,8 +242,8 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
                     max_uses_per_customer: 1,
                     expires: expiry,
                     applies_to: {
-                    entity: 'categories',
-                    ids: []
+                        entity: 'categories',
+                        ids: []
                     }
                 },
             { 
