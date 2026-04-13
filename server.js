@@ -227,17 +227,21 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
 
         await axios.post(
             `https://api.bigcommerce.com/stores/${BC_STORE_HASH}/v2/coupons`,
-            {
-                name: `Spin Wheel - ${prize}`,
-                code: code,
-                type: couponType,
-                amount: discountValue.toString(),
-                min_purchase: '100.00',
-                enabled: true,
-                max_uses: 1,
-                max_uses_per_customer: 1,
-                expires: expiry
-            },
+                {
+                    name: `Spin Wheel - ${prize}`,
+                    code: code,
+                    type: couponType,
+                    amount: discountValue.toString(),
+                    min_purchase: '100.00',
+                    enabled: true,
+                    max_uses: 1,
+                    max_uses_per_customer: 1,
+                    expires: expiry,
+                    applies_to: {
+                        entity: 'categories',
+                        ids: [] // empty = applies to ALL products
+                    }
+                },
             { 
                 headers: { 
                     'X-Auth-Token': BC_API_TOKEN, 
