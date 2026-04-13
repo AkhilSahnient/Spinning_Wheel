@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spin Wheel - Win a Prize!</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f4f4f4;
+        }
+
+        .container {
+            text-align: center;
+            background: white;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .wheel-container {
+            position: relative;
+            width: 300px;
+            height: 300px;
+            margin: 20px auto;
+        }
+
+        #wheel {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            border: 5px solid #333;
+            transition: transform 3s cubic-bezier(0.17, 0.67, 0.12, 0.99);
+            background: conic-gradient(
+                #ff6384 0% 12.5%, 
+                #36a2eb 12.5% 25%, 
+                #cc65fe 25% 37.5%, 
+                #ffce56 37.5% 50%, 
+                #4bc0c0 50% 62.5%, 
+                #ff9f40 62.5% 75%, 
+                #36a2eb 75% 87.5%, 
+                #ff6384 87.5% 100%
+            );
+        }
+
+        .pointer {
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 10px solid transparent;
+            border-right: 10px solid transparent;
+            border-top: 20px solid #333;
+            z-index: 10;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            background-color: #36a2eb;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+
+        button:disabled {
+            background-color: #ccc;
+        }
+
+        input {
+            padding: 10px;
+            margin-bottom: 10px;
+            width: 200px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        #result {
+            margin-top: 20px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Spin and Win!</h1>
+        <p>Enter your email for a chance to win a discount code.</p>
+        <input type="email" id="email" placeholder="Your Email Address" required>
+        
+        <div class="wheel-container">
+            <div class="pointer"></div>
+            <div id="wheel"></div>
+        </div>
+
+        <button id="spinBtn">SPIN NOW</button>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        const wheel = document.getElementById('wheel');
+        const spinBtn = document.getElementById('spinBtn');
+        const emailInput = document.getElementById('email');
+        const resultDiv = document.getElementById('result');
+
+        const prizes = [
+            "5% OFF", "10% OFF", "15% OFF", "20% OFF", 
+            "FREE SHIPPING", "5% OFF", "10% OFF", "15% OFF"
+        ];
+
+        let isSpinning = false;
+
+        spinBtn.addEventListener('click', async () => {
+            const email = emailInput.value;
+            if (!email) {
+                alert("Please enter your email first!");
+                return;
+            }
+
+            if (isSpinning) return;
+            isSpinning = true;
+            spinBtn.disabled = true;
+            resultDiv.innerText = "Spinning...";
+
+            const randomDegree = Math.floor(Math.random() * 360) + 1440; // At least 4 full rotations
+            wheel.style.transform = `rotate(${randomDegree}deg)`;
+
+            setTimeout(async () => {
+                const finalDegree = randomDegree % 360;
+                const prizeIndex = Math.floor((360 - finalDegree) / (360 / prizes.length)) % prizes.length;
+                const prize = prizes[prizeIndex];
+
+                resultDiv.innerText = `You won: ${prize}! Claiming your prize...`;
+
+                try {
+                    const response = await fetch('http://localhost:3001/api/spin-wheel/claim', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ email, prize }),
+                    });
+
+                    const data = await response.json();
+
+                    if (data.eligible) {
+                        resultDiv.innerText = `Success! Your coupon code is: ${data.code}. Use it on your next purchase!`;
+                    } else {
+                        resultDiv.innerText = data.message || "Sorry, you are not eligible for this offer.";
+                    }
+                } catch (error) {
+                    console.error('Error claiming prize:', error);
+                    resultDiv.innerText = "Error claiming prize. Please try again later.";
+                }
+
+                isSpinning = false;
+                spinBtn.disabled = false;
+            }, 3000);
+        });
+    </script>
+</body>
+</html>
