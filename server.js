@@ -100,12 +100,15 @@ async function createCoupon(prize, email) {
     }
     
     const code = `SPIN-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
-   const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toUTCString();
+        let expiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toUTCString();
+        expiry = expiry.replace(' GMT', ' +0000');
+        console.log('Fixed expiry:', JSON.stringify(expiry)); 
     
         const couponPayload = {
         name: `Spin Wheel - ${prize}`,
         code: code,
         type: couponType,
+        expires: expiry,
         min_purchase: '100.00',
         enabled: true,
         max_uses: 1,
@@ -225,8 +228,10 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
             if (match) discountValue = parseInt(match[1]);
         }
 
-        const code = 'SPIN-' + Math.random().toString(36).substring(2, 8).toUpperCase();
-        const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toUTCString();
+        let expiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toUTCString();
+        expiry = expiry.replace(' GMT', ' +0000');
+        console.log('Fixed expiry:', JSON.stringify(expiry));  // "Tue, 14 Apr 2026 23:36:42 +0000"
+
 
         await axios.post(
             `https://api.bigcommerce.com/stores/${BC_STORE_HASH}/v2/coupons`,
@@ -238,6 +243,7 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
                     min_purchase: '100.00',
                     enabled: true,
                     max_uses: 1,
+                    expires: expiry,
                     max_uses_per_customer: 1,
                     applies_to: {
                         entity: 'categories',
