@@ -132,7 +132,6 @@ async function createCoupon(prize, email) {
     return { code, couponData: response.data };
 }
 
-// Main route to validate spin eligibility
 app.post('/api/spin-wheel/validate-cart', async (req, res) => {
     const { cartId, email } = req.body;
     
