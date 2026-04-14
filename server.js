@@ -87,45 +87,69 @@ async function isNewCustomer(email) {
     }
 }
 
-// Create coupon in BigCommerce
 async function createCoupon(prize, email) {
     let discountValue = 0;
-    let couponType = 'percentage_discount';
-    
+    let isShipping = false;
+
     if (prize.includes('FREE SHIPPING')) {
-        couponType = 'free_shipping';
+        isShipping = true;
     } else {
         const match = prize.match(/(\d+)%/);
         if (match) discountValue = parseInt(match[1]);
     }
-    
-    const code = `SPIN-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
-        let expiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toUTCString();
-        expiry = expiry.replace(' GMT', ' +0000');
-        console.log('Fixed expiry:', JSON.stringify(expiry)); 
-    
-        const couponPayload = {
-        name: `Spin Wheel - ${prize}`,
-        code: code,
-        type: couponType,
-        expires: expiry,
-        min_purchase: '100.00',
-        enabled: true,
-        max_uses: 1,
-        max_uses_per_customer: 1,
-        applies_to: {
-            entity: 'categories',
-            ids: []
-        }
-        };
 
-if (couponType !== 'free_shipping') {
-  couponPayload.amount = discountValue.toString();
-}
-    
+    const code = 'SPIN-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+
+    const promotionPayload = {
+        name: `Spin Wheel - ${prize} for ${email}`,
+        redemption_type: 'COUPON',
+        status: 'ENABLED',
+        max_uses: 1,
+        rules: [
+            {
+                action: isShipping ? {
+                    shipping: {
+                        free_shipping: true
+                    }
+                } : {
+                    cart_items: {
+                        discount: {
+                            percentage_amount: discountValue.toString()
+                        },
+                        as_total: false,
+                        include_items_considered_by_condition: true,
+                        exclude_items_on_sale: false,
+                        items: {
+                            categories: [],
+                            brands: [],
+                            products: [],
+                            variants: []
+                        }
+                    }
+                },
+                conditions: [
+                    {
+                        cart: {
+                            minimum_spend: '100.00'
+                        }
+                    }
+                ],
+                apply_once: true,
+                stop: false
+            }
+        ],
+        coupons: [
+            {
+                code: code,
+                max_uses: 1,
+                max_uses_per_customer: 1
+            }
+        ]
+    };
+
     const response = await axios.post(
-        `https://api.bigcommerce.com/stores/${BC_STORE_HASH}/v2/coupons`,
-        couponPayload,
+        `https://api.bigcommerce.com/stores/${BC_STORE_HASH}/v3/promotions`,
+        promotionPayload,
         {
             headers: {
                 'X-Auth-Token': BC_API_TOKEN,
@@ -134,55 +158,56 @@ if (couponType !== 'free_shipping') {
             }
         }
     );
-    
-    return { code, couponData: response.data };
+
+    console.log('✅ Promotion created:', response.data);
+    return { code, promotionData: response.data };
 }
 
-app.post('/api/spin-wheel/validate-cart', async (req, res) => {
-    const { cartId, email } = req.body;
-    
-    if (!cartId) {
-        return res.status(400).json({ 
-            eligible: false, 
-            message: 'Cart ID is required' 
-        });
+
+app.post('/api/spin-wheel/claim', async (req, res) => {
+    const { email, prize } = req.body;
+
+    if (!email || !prize) {
+        return res.status(400).json({ error: 'Email and prize required' });
     }
-    
+
     try {
-        // Get current cart value
-        const cartInfo = await getCartValue(cartId, email);
-        
-        if (!cartInfo) {
-            return res.status(404).json({ 
-                eligible: false, 
-                message: 'Cart not found' 
-            });
+        // Check if new customer
+        const customerRes = await axios.get(
+            `https://api.bigcommerce.com/stores/${BC_STORE_HASH}/v3/customers?email:in=${email}`,
+            { headers: { 'X-Auth-Token': BC_API_TOKEN, 'Accept': 'application/json' } }
+        );
+
+        const customers = customerRes.data.data;
+
+        if (customers.length > 0) {
+            const customerId = customers[0].id;
+            const ordersRes = await axios.get(
+                `https://api.bigcommerce.com/stores/${BC_STORE_HASH}/v2/orders?customer_id=${customerId}&status_id=10`,
+                { headers: { 'X-Auth-Token': BC_API_TOKEN, 'Accept': 'application/json' } }
+            );
+            if (Array.isArray(ordersRes.data) && ordersRes.data.length > 0) {
+                return res.json({ 
+                    eligible: false, 
+                    message: 'This offer is for new customers only.' 
+                });
+            }
         }
-        
-        // Check if cart meets minimum requirement
-        const meetsMinimum = cartInfo.subtotal >= 100;
-        
-        // If email is provided, check if customer is new
-        let isNew = true;
-        if (email) {
-            isNew = await isNewCustomer(email);
-        }
-        
-        res.json({
-            eligible: meetsMinimum && isNew,
-            meetsMinimum,
-            isNew,
-            cartSubtotal: cartInfo.subtotal,
-            requiredAmount: 100,
-            remainingToQualify: Math.max(0, 100 - cartInfo.subtotal)
+
+        // Create promotion with coupon
+        const { code } = await createCoupon(prize, email);
+
+        console.log(`✅ Spin promotion created: ${code} for ${email} - ${prize}`);
+        res.json({ 
+            success: true, 
+            eligible: true, 
+            code: code, 
+            prize: prize 
         });
-        
+
     } catch (error) {
-        console.error('Validation error:', error);
-        res.status(500).json({ 
-            eligible: false, 
-            message: 'Error validating cart' 
-        });
+        console.error('Spin claim error:', error.response?.data || error.message);
+        res.status(500).json({ error: 'Something went wrong. Please try again.' });
     }
 });
 
