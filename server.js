@@ -187,7 +187,6 @@ app.post('/api/spin-wheel/validate-cart', async (req, res) => {
 });
 
 // Route to claim prize after spinning
-// ============ SPIN WHEEL CLAIM ============
 app.post('/api/spin-wheel/claim', async (req, res) => {
     const { email, prize } = req.body;
 
@@ -218,6 +217,9 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
             }
         }
 
+        // ✅ FIX #1: Generate coupon code first
+        const code = `SPIN-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+        
         let discountValue = 0;
         let couponType = 'percentage_discount';
 
@@ -228,28 +230,34 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
             if (match) discountValue = parseInt(match[1]);
         }
 
-        let expiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toUTCString();
-        expiry = expiry.replace(' GMT', ' +0000');
-        console.log('Fixed expiry:', JSON.stringify(expiry));  // "Tue, 14 Apr 2026 23:36:42 +0000"
+        // ✅ FIX #2: Use toUTCString() WITHOUT modification
+        const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toUTCString();
+        // This returns: "Tue, 14 Apr 2026 23:36:42 GMT" ✅ VALID RFC-2822
 
+        // Build payload dynamically (free_shipping doesn't have amount)
+        const couponPayload = {
+            name: `Spin Wheel - ${prize}`,
+            code: code,
+            type: couponType,
+            min_purchase: '100.00',
+            enabled: true,
+            max_uses: 1,
+            expires: expiry,
+            max_uses_per_customer: 1,
+            applies_to: {
+                entity: 'categories',
+                ids: []
+            }
+        };
 
-        await axios.post(
+        // Only add amount for percentage discounts (not for free shipping)
+        if (couponType !== 'free_shipping') {
+            couponPayload.amount = discountValue.toString();
+        }
+
+        const couponResponse = await axios.post(
             `https://api.bigcommerce.com/stores/${BC_STORE_HASH}/v2/coupons`,
-                {
-                    name: `Spin Wheel - ${prize}`,
-                    code: code,
-                    type: couponType,
-                    amount: discountValue.toString(),
-                    min_purchase: '100.00',
-                    enabled: true,
-                    max_uses: 1,
-                    expires: expiry,
-                    max_uses_per_customer: 1,
-                    applies_to: {
-                        entity: 'categories',
-                        ids: []
-                    }
-                },
+            couponPayload,
             { 
                 headers: { 
                     'X-Auth-Token': BC_API_TOKEN, 
@@ -260,7 +268,14 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
         );
 
         console.log(`✅ Spin coupon created: ${code} for ${email} - ${prize}`);
-        res.json({ success: true, eligible: true, code: code, prize: prize });
+        console.log(`Expiry date sent: ${expiry}`);
+        
+        res.json({ 
+            success: true, 
+            eligible: true, 
+            code: code, 
+            prize: prize 
+        });
 
     } catch (error) {
         console.error('Spin claim error:', error.response?.data || error.message);
