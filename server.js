@@ -54,63 +54,7 @@ async function isNewCustomer(email) {
     }
 }
 
-// Create promotion using Promotions API
-async function createPromotion(prize, email) {
-    let discountValue = 0;
-    let actionType = 'PERCENT_DISCOUNT';
-    
-    if (prize.includes('FREE SHIPPING')) {
-        actionType = 'FREE_SHIPPING';
-    } else {
-        const match = prize.match(/(\d+)%/);
-        if (match) discountValue = parseInt(match[1]);
-    }
-    
-    const code = `SPIN-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
-    const endsAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-    
-    const promotionPayload = {
-        name: `Spin Wheel - ${prize} for ${email}`,
-        redemption_type: 'COUPON',
-        status: 'ENABLED',
-        start_date: new Date().toISOString(),
-        end_date: endsAt,
-        max_uses: 1,
-        customer_qualification: {
-            minimum_order_count: 0
-        },
-        cart_qualification: {
-            min_amount: 10000  // $100.00 in cents
-        },
-        action: actionType === 'FREE_SHIPPING' 
-            ? { type: 'FREE_SHIPPING' }
-            : { 
-                type: 'PERCENT_DISCOUNT',
-                value: discountValue
-              },
-        coupons: [{
-            code: code,
-            max_uses: 1,
-            max_uses_per_customer: 1
-        }]
-    };
-    
-    const response = await axios.post(
-        `https://api.bigcommerce.com/stores/${BC_STORE_HASH}/v3/promotions`,
-        promotionPayload,
-        {
-            headers: {
-                'X-Auth-Token': BC_API_TOKEN,
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            }
-        }
-    );
-    
-    return { code, promotionData: response.data };
-}
-
-// Single route for spin wheel claim - USING PROMOTIONS API
+// Route to claim prize using PROMOTIONS API
 app.post('/api/spin-wheel/claim', async (req, res) => {
     const { email, prize } = req.body;
 
@@ -129,10 +73,71 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
             });
         }
 
-        // Create promotion with coupon
-        const { code } = await createPromotion(prize, email);
-
-        console.log(`✅ Spin promotion created: ${code} for ${email} - ${prize}`);
+        // Parse prize
+        let discountValue = 0;
+        let actionType = 'PERCENT_DISCOUNT';
+        
+        if (prize.includes('FREE SHIPPING')) {
+            actionType = 'FREE_SHIPPING';
+        } else {
+            const match = prize.match(/(\d+)%/);
+            if (match) discountValue = parseInt(match[1]);
+        }
+        
+        // Generate unique coupon code
+        const code = `SPIN-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+        
+        // ✅ CORRECT DATE FORMAT FOR PROMOTIONS API (ISO 8601)
+        const startDate = new Date().toISOString(); // "2026-04-15T12:34:56.789Z"
+        const endDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 1 day from now
+        
+        console.log('Creating promotion with dates:', { startDate, endDate });
+        
+        // Build promotion payload for Promotions API
+        const promotionPayload = {
+            name: `Spin Wheel - ${prize} for ${email}`,
+            redemption_type: 'COUPON',
+            status: 'ENABLED',
+            start_date: startDate,  // ✅ ISO 8601 format
+            end_date: endDate,      // ✅ ISO 8601 format
+            max_uses: 1,
+            customer_qualification: {
+                minimum_order_count: 0  // New customers only
+            },
+            cart_qualification: {
+                min_amount: 10000  // $100.00 in cents
+            },
+            action: actionType === 'FREE_SHIPPING' 
+                ? { type: 'FREE_SHIPPING' }
+                : { 
+                    type: 'PERCENT_DISCOUNT',
+                    value: discountValue
+                  },
+            coupons: [{
+                code: code,
+                max_uses: 1,
+                max_uses_per_customer: 1
+            }]
+        };
+        
+        console.log('Promotion payload:', JSON.stringify(promotionPayload, null, 2));
+        
+        // Create the promotion
+        const response = await axios.post(
+            `https://api.bigcommerce.com/stores/${BC_STORE_HASH}/v3/promotions`,
+            promotionPayload,
+            {
+                headers: {
+                    'X-Auth-Token': BC_API_TOKEN,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }
+            }
+        );
+        
+        console.log(`✅ Promotion created successfully: ${code} for ${email} - ${prize}`);
+        console.log(`Promotion ID: ${response.data.data.id}`);
+        
         res.json({ 
             success: true, 
             eligible: true, 
@@ -141,8 +146,13 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Spin claim error:', error.response?.data || error.message);
-        res.status(500).json({ error: 'Something went wrong. Please try again.' });
+        console.error('Promotion creation error:', error.response?.data || error.message);
+        
+        // Send detailed error for debugging
+        res.status(500).json({ 
+            error: 'Something went wrong. Please try again.',
+            details: error.response?.data || error.message 
+        });
     }
 });
 
@@ -150,7 +160,7 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
 app.get('/', (req, res) => {
     res.json({ 
         status: 'running', 
-        message: 'Spin Wheel Backend API' 
+        message: 'Spin Wheel Backend API (Promotions API)' 
     });
 });
 
