@@ -104,75 +104,87 @@ function formatDate(date) {
     return date.toISOString().replace(/\.\d{3}Z$/, "+00:00");
 }
 const startDate = formatDate(new Date());
-const endDate = formatDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
 
 app.post('/api/spin-wheel/claim', async (req, res) => {
     const { email, prize } = req.body;
-    
-    // Parse percentage from prize
-    const percentageMatch = prize.match(/(\d+)%/);
-    if (!percentageMatch) {
-        return res.status(400).json({ error: "Invalid prize format" });
+
+    // Detect prize type
+    const isFreeShipping = prize.toUpperCase().includes('FREE SHIPPING');
+
+    let percentage = 0;
+    if (!isFreeShipping) {
+        const match = prize.match(/(\d+)%/);
+        if (!match) {
+            return res.status(400).json({ error: "Invalid prize format" });
+        }
+        percentage = parseInt(match[1]);
     }
-    
-    const percentage = parseInt(percentageMatch[1]);
-    
-    // Check if user already claimed
+
     const hasClaimed = await checkUserClaimed(email);
     if (hasClaimed) {
         return res.status(429).json({ error: "User has already claimed a prize" });
     }
-    
-    // Create promotion - BigCommerce will handle the $100 condition automatically
- const promotionPayload = {
-    name: `Spin Wheel Prize: ${prize} for ${email}`,
-    redemption_type: "AUTOMATIC",
-    status: "ENABLED",
 
-    rules: [
-        {
-            apply_once: true,
-            stop: false,
+    // ✅ Build action dynamically
+    let action;
 
-            action: {
-                cart_value: {
-                    discount: {
-                        percentage_amount: percentage // ✅ THIS is correct key
-                    }
-                }
-            },
-
-            condition: {
-                cart: {
-                    minimum_spend: "100.00" // ✅ STRING, not number
+    if (isFreeShipping) {
+        action = {
+            shipping: {
+                free_shipping: true
+            }
+        };
+    } else {
+        action = {
+            cart_value: {
+                discount: {
+                    percentage_amount: percentage
                 }
             }
-        }
-    ],
+        };
+    }
 
-    start_date: startDate,
-    end_date: endDate
-};
-    
+    const promotionPayload = {
+        name: `Spin Wheel Prize: ${prize} for ${email}`,
+        redemption_type: "AUTOMATIC",
+        status: "ENABLED",
+
+        rules: [
+            {
+                apply_once: true,
+                stop: false,
+
+                action: action,
+
+                condition: {
+                    cart: {
+                        minimum_spend: "100.00"
+                    }
+                }
+            }
+        ],
+
+        start_date: formatDate(new Date())
+        // ❌ No end_date = valid until manually disabled
+    };
+
     try {
-        // Just create the promotion - no cart checking needed in your code
         const response = await bigcommerceApi.post('/v3/promotions', promotionPayload);
-        
-        // Store that user claimed
-        await storeClaim(email, prize, response.data.id);
-        
+
+        await storeClaim(email, prize, response.data.data?.id);
+
         res.json({
             success: true,
-            discount: `${percentage}% OFF`,
-            condition: "Minimum purchase of $100 (auto-checked at checkout)",
-            expires_in: "7 days",
-            message: "Promotion created! It will apply automatically when cart total reaches $100."
+            reward: isFreeShipping ? "FREE SHIPPING" : `${percentage}% OFF`,
+            message: isFreeShipping
+                ? "Free shipping will be applied at checkout for orders above $100."
+                : "Discount will auto-apply when cart reaches $100."
         });
-        
+
     } catch (error) {
         console.error('Promotion creation error:', error.response?.data);
         res.status(422).json({
-            error: "Something went wrong. Please try again.",
+            error: "Something went wrong",
             details: error.response?.data
         });
     }
