@@ -26,25 +26,71 @@ app.use(express.json());
 const { BC_STORE_HASH, BC_API_TOKEN } = process.env;
 const PORT = process.env.PORT || 3001;
 
+// BigCommerce API client
+const bigcommerceApi = axios.create({
+    baseURL: `https://api.bigcommerce.com/stores/${BC_STORE_HASH}`,
+    headers: {
+        'X-Auth-Token': BC_API_TOKEN,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    }
+});
+
+// Simple in-memory storage (use Redis/DB in production)
+const claimsStore = new Map();
+
+// Check if user has claimed before
+async function checkUserClaimed(email) {
+    // Check in-memory store
+    if (claimsStore.has(email)) {
+        return true;
+    }
+    
+    // Optional: Check BigCommerce for existing claims
+    try {
+        const response = await bigcommerceApi.get('/v3/promotions/price-rules', {
+            params: { name: `Spin Wheel Prize: %${email}%` }
+        });
+        
+        return response.data.data.length > 0;
+    } catch (error) {
+        console.error('Error checking existing claims:', error.message);
+        return false;
+    }
+}
+
+// Store claim
+async function storeClaim(email, prize, couponCode, ruleId) {
+    claimsStore.set(email, {
+        prize,
+        couponCode,
+        ruleId,
+        claimedAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    });
+    
+    // Optional: Store in your database here
+    console.log(`Claim stored for ${email}: ${prize}, Code: ${couponCode}`);
+    return true;
+}
+
 // Check if customer is new
 async function isNewCustomer(email) {
     try {
-        const customerRes = await axios.get(
-            `https://api.bigcommerce.com/stores/${BC_STORE_HASH}/v3/customers?email:in=${encodeURIComponent(email)}`,
-            { headers: { 'X-Auth-Token': BC_API_TOKEN, 'Accept': 'application/json' } }
-        );
+        const response = await bigcommerceApi.get('/v3/customers', {
+            params: { 'email:in': email }
+        });
 
-        const customers = customerRes.data.data;
+        const customers = response.data.data;
         
         if (customers.length === 0) {
             return true;
         }
         
         const customerId = customers[0].id;
-        const ordersRes = await axios.get(
-            `https://api.bigcommerce.com/stores/${BC_STORE_HASH}/v2/orders?customer_id=${customerId}&status_id=10`,
-            { headers: { 'X-Auth-Token': BC_API_TOKEN, 'Accept': 'application/json' } }
-        );
+        const ordersRes = await bigcommerceApi.get('/v2/orders', {
+            params: { customer_id: customerId, status_id: 10 }
+        });
         
         return ordersRes.data.length === 0;
         
@@ -54,116 +100,136 @@ async function isNewCustomer(email) {
     }
 }
 
-// Route to claim prize using PROMOTIONS API
 app.post('/api/spin-wheel/claim', async (req, res) => {
     const { email, prize } = req.body;
-
+    
+    // Validate inputs
     if (!email || !prize) {
-        return res.status(400).json({ error: 'Email and prize required' });
+        return res.status(400).json({ error: "Email and prize are required" });
     }
-
+    
+    // Validate email format
+    if (!email.includes('@')) {
+        return res.status(400).json({ error: "Invalid email format" });
+    }
+    
+    // Parse percentage from prize
+    const percentageMatch = prize.match(/(\d+)%/);
+    if (!percentageMatch) {
+        return res.status(400).json({ error: "Invalid prize format" });
+    }
+    
+    const percentage = parseInt(percentageMatch[1]);
+    
     try {
-        // Check if customer is new
-        const isNew = await isNewCustomer(email);
-        
-        if (!isNew) {
-            return res.json({ 
-                eligible: false, 
-                message: 'This offer is for new customers only.' 
+        // Check if user already claimed
+        const hasClaimed = await checkUserClaimed(email);
+        if (hasClaimed) {
+            return res.status(429).json({ 
+                error: "User has already claimed a prize",
+                message: "Each customer can only claim one prize"
             });
         }
-
-        // Parse prize
-        let discountValue = 0;
-        let actionType = 'PERCENT_DISCOUNT';
         
-        if (prize.includes('FREE SHIPPING')) {
-            actionType = 'FREE_SHIPPING';
-        } else {
-            const match = prize.match(/(\d+)%/);
-            if (match) discountValue = parseInt(match[1]);
-        }
+        const couponCode = `SPIN${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
         
-        // Generate unique coupon code
-        const code = `SPIN-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
-        
-        // ✅ CORRECT DATE FORMAT FOR PROMOTIONS API (ISO 8601)
-        const startDate = new Date().toISOString(); // "2026-04-15T12:34:56.789Z"
-        const endDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 1 day from now
-        
-        console.log('Creating promotion with dates:', { startDate, endDate });
-        
-        // Build promotion payload for Promotions API
-        const promotionPayload = {
-            name: `Spin Wheel - ${prize} for ${email}`,
-            redemption_type: 'COUPON',
-            status: 'ENABLED',
-            start_date: startDate,  // ✅ ISO 8601 format
-            end_date: endDate,      // ✅ ISO 8601 format
-            max_uses: 1,
-            customer_qualification: {
-                minimum_order_count: 0  // New customers only
+        const rulePayload = {
+            name: `Spin Wheel Prize: ${prize} for ${email}`,
+            status: "enabled",
+            priority: 1,
+            stop: false,
+            conditions: {
+                operator: "and",
+                rules: [{
+                    operator: "greater_than_or_equal_to",
+                    value: 100,
+                    field: "cart.subtotal"
+                }]
             },
-            cart_qualification: {
-                min_amount: 10000  // $100.00 in cents
+            actions: {
+                operator: "and",
+                rules: [{
+                    operator: "percent_discount",
+                    value: percentage,
+                    field: "cart.subtotal"
+                }]
             },
-            action: actionType === 'FREE_SHIPPING' 
-                ? { type: 'FREE_SHIPPING' }
-                : { 
-                    type: 'PERCENT_DISCOUNT',
-                    value: discountValue
-                  },
-            coupons: [{
-                code: code,
-                max_uses: 1,
-                max_uses_per_customer: 1
-            }]
+            channels: [1],
+            customer_groups: [],
+            start_date: new Date().toISOString(),
+            end_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
         };
         
-        console.log('Promotion payload:', JSON.stringify(promotionPayload, null, 2));
+        // Create price rule in BigCommerce
+        const response = await bigcommerceApi.post('/v3/promotions/price-rules', rulePayload);
         
-        // Create the promotion
-        const response = await axios.post(
-            `https://api.bigcommerce.com/stores/${BC_STORE_HASH}/v3/promotions`,
-            promotionPayload,
-            {
-                headers: {
-                    'X-Auth-Token': BC_API_TOKEN,
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
-            }
-        );
+        // Store claim
+        await storeClaim(email, prize, couponCode, response.data.data.id);
         
-        console.log(`✅ Promotion created successfully: ${code} for ${email} - ${prize}`);
-        console.log(`Promotion ID: ${response.data.data.id}`);
-        
-        res.json({ 
-            success: true, 
-            eligible: true, 
-            code: code, 
-            prize: prize 
+        res.json({
+            success: true,
+            coupon_code: couponCode,
+            discount: `${percentage}% OFF`,
+            condition: "Minimum purchase of $100",
+            expires_in: "7 days",
+            message: "Discount applied! Share this code at checkout.",
+            rule_id: response.data.data.id
         });
-
-    } catch (error) {
-        console.error('Promotion creation error:', error.response?.data || error.message);
         
-        // Send detailed error for debugging
-        res.status(500).json({ 
-            error: 'Something went wrong. Please try again.',
-            details: error.response?.data || error.message 
+    } catch (error) {
+        console.error('BigCommerce API Error:', {
+            status: error.response?.status,
+            data: error.response?.data,
+            message: error.message
+        });
+        
+        // Handle specific BigCommerce errors
+        if (error.response?.status === 422) {
+            return res.status(422).json({
+                error: "Failed to create discount rule",
+                details: error.response.data
+            });
+        }
+        
+        res.status(500).json({
+            error: "Something went wrong. Please try again.",
+            details: error.response?.data || { message: error.message }
         });
     }
+});
+
+// Optional: Endpoint to check claim status
+app.get('/api/spin-wheel/claim/:email', async (req, res) => {
+    const { email } = req.params;
+    
+    if (!email) {
+        return res.status(400).json({ error: "Email is required" });
+    }
+    
+    const hasClaimed = await checkUserClaimed(email);
+    const claim = claimsStore.get(email);
+    
+    res.json({
+        has_claimed: hasClaimed,
+        claim: claim || null
+    });
 });
 
 // Health check
 app.get('/', (req, res) => {
     res.json({ 
         status: 'running', 
-        message: 'Spin Wheel Backend API (Promotions API)' 
+        message: 'Spin Wheel Backend API (Promotions API)',
+        endpoints: {
+            claim: 'POST /api/spin-wheel/claim',
+            checkClaim: 'GET /api/spin-wheel/claim/:email'
+        }
     });
 });
 
 app.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
+    console.log(`✅ BigCommerce Store: ${BC_STORE_HASH}`);
+    console.log(`✅ API endpoints ready`);
 });
+//latest
