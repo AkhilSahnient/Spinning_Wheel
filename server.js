@@ -103,16 +103,6 @@ async function isNewCustomer(email) {
 app.post('/api/spin-wheel/claim', async (req, res) => {
     const { email, prize } = req.body;
     
-    // Validate inputs
-    if (!email || !prize) {
-        return res.status(400).json({ error: "Email and prize are required" });
-    }
-    
-    // Validate email format
-    if (!email.includes('@')) {
-        return res.status(400).json({ error: "Invalid email format" });
-    }
-    
     // Parse percentage from prize
     const percentageMatch = prize.match(/(\d+)%/);
     if (!percentageMatch) {
@@ -121,79 +111,73 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
     
     const percentage = parseInt(percentageMatch[1]);
     
+    // Check if user already claimed
+    const hasClaimed = await checkUserClaimed(email);
+    if (hasClaimed) {
+        return res.status(429).json({ error: "User has already claimed a prize" });
+    }
+    
+    // Create promotion - BigCommerce will handle the $100 condition automatically
+    const promotionPayload = {
+        name: `Spin Wheel Prize: ${prize} for ${email}`,
+        redemption_type: "AUTOMATIC",
+        status: "ENABLED",
+        stop: false,
+        rules: [
+            {
+                action: {
+                    percent_discount: {
+                        value: percentage
+                    }
+                },
+                apply_once: true,
+                stop: false,
+                condition: {
+                    cart: {
+                        minimum_subtotal: {
+                            value: 100,  // BigCommerce enforces this automatically
+                            currency: "USD"
+                        }
+                    }
+                }
+            }
+        ],
+        notifications: [
+            {
+                type: "ELIGIBLE",
+                content: `🎉 You've won ${prize}! Add $100+ to your cart to activate.`,
+                locations: ["CART_PAGE"]
+            },
+            {
+                type: "APPLIED",
+                content: `✨ ${prize} discount applied to your cart!`,
+                locations: ["CART_PAGE"]
+            }
+        ],
+        start_date: new Date().toISOString(),
+        end_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    };
+    
     try {
-        // Check if user already claimed
-        const hasClaimed = await checkUserClaimed(email);
-        if (hasClaimed) {
-            return res.status(429).json({ 
-                error: "User has already claimed a prize",
-                message: "Each customer can only claim one prize"
-            });
-        }
+        // Just create the promotion - no cart checking needed in your code
+        const response = await bigcommerceApi.post('/v3/promotions', promotionPayload);
         
-        const couponCode = `SPIN${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-        
-        const rulePayload = {
-            name: `Spin Wheel Prize: ${prize} for ${email}`,
-            status: "enabled",
-            priority: 1,
-            stop: false,
-            conditions: {
-                operator: "and",
-                rules: [{
-                    operator: "greater_than_or_equal_to",
-                    value: 100,
-                    field: "cart.subtotal"
-                }]
-            },
-            actions: {
-                operator: "and",
-                rules: [{
-                    operator: "percent_discount",
-                    value: percentage,
-                    field: "cart.subtotal"
-                }]
-            },
-            channels: [1],
-            customer_groups: [],
-            start_date: new Date().toISOString(),
-            end_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-        };
-        
-        // Create price rule in BigCommerce
-        const response = await bigcommerceApi.post('/v3/promotions/price-rules', rulePayload);
-        
-        // Store claim
-        await storeClaim(email, prize, couponCode, response.data.data.id);
+        // Store that user claimed
+        await storeClaim(email, prize, response.data.id);
         
         res.json({
             success: true,
-            coupon_code: couponCode,
             discount: `${percentage}% OFF`,
-            condition: "Minimum purchase of $100",
+            condition: "Minimum purchase of $100 (auto-checked at checkout)",
             expires_in: "7 days",
-            message: "Discount applied! Share this code at checkout.",
-            rule_id: response.data.data.id
+            message: "Promotion created! It will apply automatically when cart total reaches $100."
         });
         
     } catch (error) {
-        console.error('BigCommerce API Error:', {
-            status: error.response?.status,
-            data: error.response?.data,
-            message: error.message
-        });
-        
-        // Handle specific BigCommerce errors
-        if (error.response?.status === 422) {
-            return res.status(422).json({
-                error: "Failed to create discount rule",
-                details: error.response.data
-            });
-        }
-        
-        res.status(500).json({
+        console.error('Promotion creation error:', error.response?.data);
+        res.status(422).json({
             error: "Something went wrong. Please try again.",
-            details: error.response?.data || { message: error.message }
+            details: error.response?.data
         });
     }
 });
