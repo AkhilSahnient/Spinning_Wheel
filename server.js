@@ -118,45 +118,35 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
     }
     
     // Create promotion - BigCommerce will handle the $100 condition automatically
-    const promotionPayload = {
-        name: `Spin Wheel Prize: ${prize} for ${email}`,
-        redemption_type: "AUTOMATIC",
-        status: "ENABLED",
-        stop: false,
-        rules: [
-            {
-                action: {
-                    percent_discount: {
-                        value: percentage
-                    }
-                },
-                apply_once: true,
-                stop: false,
-                condition: {
-                    cart: {
-                        minimum_subtotal: {
-                            value: 100,  // BigCommerce enforces this automatically
-                            currency: "USD"
-                        }
+ const promotionPayload = {
+    name: `Spin Wheel Prize: ${prize} for ${email}`,
+    redemption_type: "AUTOMATIC",
+    status: "ENABLED",
+
+    rules: [
+        {
+            apply_once: true,
+            stop: false,
+
+            action: {
+                cart_value: {
+                    discount: {
+                        percentage_amount: percentage // ✅ THIS is correct key
                     }
                 }
-            }
-        ],
-        notifications: [
-            {
-                type: "ELIGIBLE",
-                content: `🎉 You've won ${prize}! Add $100+ to your cart to activate.`,
-                locations: ["CART_PAGE"]
             },
-            {
-                type: "APPLIED",
-                content: `✨ ${prize} discount applied to your cart!`,
-                locations: ["CART_PAGE"]
+
+            condition: {
+                cart: {
+                    minimum_spend: "100.00" // ✅ STRING, not number
+                }
             }
-        ],
-        start_date: new Date().toISOString(),
-        end_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-    };
+        }
+    ],
+
+    start_date: new Date().toISOString(),
+    end_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+};
     
     try {
         // Just create the promotion - no cart checking needed in your code
