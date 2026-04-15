@@ -100,6 +100,12 @@ async function isNewCustomer(email) {
     }
 }
 
+function formatDate(date) {
+    return date.toISOString().replace(/\.\d{3}Z$/, "+00:00");
+}
+const startDate = formatDate(new Date());
+const endDate = formatDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
+
 app.post('/api/spin-wheel/claim', async (req, res) => {
     const { email, prize } = req.body;
     
@@ -144,8 +150,8 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
         }
     ],
 
-    start_date: new Date().toISOString(),
-    end_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    start_date: startDate,
+    end_date: endDate
 };
     
     try {
