@@ -108,6 +108,18 @@ const startDate = formatDate(new Date());
 app.post('/api/spin-wheel/claim', async (req, res) => {
     const { email, prize } = req.body;
 
+     // Check if email already exists in database
+        const existingUser = await db.query(
+            'SELECT * FROM coupons WHERE email = ?',
+            [email]
+        );
+        
+        if (existingUser.length > 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'This email has already claimed a prize. Each email can only claim once.'
+            });
+        }
     // Detect prize type
     const isFreeShipping = prize.toUpperCase().includes('FREE SHIPPING');
 
@@ -124,6 +136,13 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
     if (hasClaimed) {
         return res.status(429).json({ error: "User has already claimed a prize" });
     }
+    const isNew = await isNewCustomer(email);
+        if (!isNew) {
+            return res.json({ 
+                eligible: false, 
+                message: 'This offer is for new customers only.' 
+            });
+        }
 
     // ✅ Build action dynamically
     let action;
@@ -190,34 +209,34 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
     }
 });
 
-// Optional: Endpoint to check claim status
-app.get('/api/spin-wheel/claim/:email', async (req, res) => {
-    const { email } = req.params;
-    
-    if (!email) {
-        return res.status(400).json({ error: "Email is required" });
-    }
-    
-    const hasClaimed = await checkUserClaimed(email);
-    const claim = claimsStore.get(email);
-    
-    res.json({
-        has_claimed: hasClaimed,
-        claim: claim || null
-    });
-});
-
-// Health check
-app.get('/', (req, res) => {
-    res.json({ 
-        status: 'running', 
-        message: 'Spin Wheel Backend API (Promotions API)',
-        endpoints: {
-            claim: 'POST /api/spin-wheel/claim',
-            checkClaim: 'GET /api/spin-wheel/claim/:email'
+    // Optional: Endpoint to check claim status
+    app.get('/api/spin-wheel/claim/:email', async (req, res) => {
+        const { email } = req.params;
+        
+        if (!email) {
+            return res.status(400).json({ error: "Email is required" });
         }
+        
+        const hasClaimed = await checkUserClaimed(email);
+        const claim = claimsStore.get(email);
+        
+        res.json({
+            has_claimed: hasClaimed,
+            claim: claim || null
+        });
     });
-});
+
+    // Health check
+    app.get('/', (req, res) => {
+        res.json({ 
+            status: 'running', 
+            message: 'Spin Wheel Backend API (Promotions API)',
+            endpoints: {
+                claim: 'POST /api/spin-wheel/claim',
+                checkClaim: 'GET /api/spin-wheel/claim/:email'
+            }
+        });
+    });
 
 app.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
