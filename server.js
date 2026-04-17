@@ -60,17 +60,15 @@ async function checkUserClaimed(email) {
 }
 
 // Store claim
-async function storeClaim(email, prize, couponCode, ruleId) {
+async function storeClaim(email, prize, promotionId) {
     claimsStore.set(email, {
         prize,
-        couponCode,
-        ruleId,
+        promotionId,
         claimedAt: new Date().toISOString(),
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
     });
     
-    // Optional: Store in your database here
-    console.log(`Claim stored for ${email}: ${prize}, Code: ${couponCode}`);
+    console.log(`Claim stored for ${email}: ${prize}`);
     return true;
 }
 
@@ -103,23 +101,27 @@ async function isNewCustomer(email) {
 function formatDate(date) {
     return date.toISOString().replace(/\.\d{3}Z$/, "+00:00");
 }
-const startDate = formatDate(new Date());
 
 app.post('/api/spin-wheel/claim', async (req, res) => {
     const { email, prize } = req.body;
 
-     // Check if email already exists in database
-        const existingUser = await db.query(
-            'SELECT * FROM coupons WHERE email = ?',
-            [email]
-        );
-        
-        if (existingUser.length > 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'This email has already claimed a prize. Each email can only claim once.'
-            });
-        }
+    // ✅ FIXED: Check if email already exists in claimsStore
+    if (claimsStore.has(email)) {
+        return res.status(400).json({
+            success: false,
+            message: 'This email has already claimed a prize. Each email can only claim once.'
+        });
+    }
+
+    // Also check BigCommerce for existing claims
+    const hasClaimed = await checkUserClaimed(email);
+    if (hasClaimed) {
+        return res.status(400).json({
+            success: false,
+            message: 'This email has already claimed a prize. Each email can only claim once.'
+        });
+    }
+
     // Detect prize type
     const isFreeShipping = prize.toUpperCase().includes('FREE SHIPPING');
 
@@ -132,19 +134,16 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
         percentage = parseInt(match[1]);
     }
 
-    const hasClaimed = await checkUserClaimed(email);
-    if (hasClaimed) {
-        return res.status(429).json({ error: "User has already claimed a prize" });
-    }
+    // Check if new customer (optional - remove if you don't want this restriction)
     const isNew = await isNewCustomer(email);
-        if (!isNew) {
-            return res.json({ 
-                eligible: false, 
-                message: 'This offer is for new customers only.' 
-            });
-        }
+    if (!isNew) {
+        return res.status(400).json({ 
+            success: false,
+            message: 'This offer is for new customers only.' 
+        });
+    }
 
-    // ✅ Build action dynamically
+    // Build action dynamically
     let action;
 
     if (isFreeShipping) {
@@ -172,9 +171,7 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
             {
                 apply_once: true,
                 stop: false,
-
                 action: action,
-
                 condition: {
                     cart: {
                         minimum_spend: "100.00"
@@ -184,7 +181,6 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
         ],
 
         start_date: formatDate(new Date())
-        // ❌ No end_date = valid until manually disabled
     };
 
     try {
@@ -194,6 +190,7 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
 
         res.json({
             success: true,
+            code: response.data.data?.id,
             reward: isFreeShipping ? "FREE SHIPPING" : `${percentage}% OFF`,
             message: isFreeShipping
                 ? "Free shipping will be applied at checkout for orders above $100."
@@ -203,44 +200,44 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
     } catch (error) {
         console.error('Promotion creation error:', error.response?.data);
         res.status(422).json({
+            success: false,
             error: "Something went wrong",
             details: error.response?.data
         });
     }
 });
 
-    // Optional: Endpoint to check claim status
-    app.get('/api/spin-wheel/claim/:email', async (req, res) => {
-        const { email } = req.params;
-        
-        if (!email) {
-            return res.status(400).json({ error: "Email is required" });
-        }
-        
-        const hasClaimed = await checkUserClaimed(email);
-        const claim = claimsStore.get(email);
-        
-        res.json({
-            has_claimed: hasClaimed,
-            claim: claim || null
-        });
+// Optional: Endpoint to check claim status
+app.get('/api/spin-wheel/claim/:email', async (req, res) => {
+    const { email } = req.params;
+    
+    if (!email) {
+        return res.status(400).json({ error: "Email is required" });
+    }
+    
+    const hasClaimed = await checkUserClaimed(email);
+    const claim = claimsStore.get(email);
+    
+    res.json({
+        has_claimed: hasClaimed,
+        claim: claim || null
     });
+});
 
-    // Health check
-    app.get('/', (req, res) => {
-        res.json({ 
-            status: 'running', 
-            message: 'Spin Wheel Backend API (Promotions API)',
-            endpoints: {
-                claim: 'POST /api/spin-wheel/claim',
-                checkClaim: 'GET /api/spin-wheel/claim/:email'
-            }
-        });
+// Health check
+app.get('/', (req, res) => {
+    res.json({ 
+        status: 'running', 
+        message: 'Spin Wheel Backend API (Promotions API)',
+        endpoints: {
+            claim: 'POST /api/spin-wheel/claim',
+            checkClaim: 'GET /api/spin-wheel/claim/:email'
+        }
     });
+});
 
 app.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
     console.log(`✅ BigCommerce Store: ${BC_STORE_HASH}`);
     console.log(`✅ API endpoints ready`);
 });
-//latest
