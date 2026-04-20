@@ -296,11 +296,9 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
                     },
                     condition: {
                         cart: {
-                            items: {
                                 subtotal: {
                                    minimum_spend: "100.00"
                                 }
-                            }
                         }
                     },
                     apply_once: true,
