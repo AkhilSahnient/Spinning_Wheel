@@ -165,7 +165,7 @@ async function sendWinnerEmail(email, prize) {
     const mailOptions = {
         from: `"Sahnient Store" <${EMAIL_USER}>`,
         to: email,
-        subject: `🎉 You Won ${prize} at Sahnient! 🎉`,
+        subject: `You Won ${prize} at Awscale!`,
         html: emailHtml
     };
     
@@ -269,13 +269,13 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
     }
 
     // Check if new customer (COMMENTED FOR TESTING - UNCOMMENT IF NEEDED)
-    // const isNew = await isNewCustomer(email);
-    // if (!isNew) {
-    //     return res.status(400).json({ 
-    //         success: false,
-    //         message: 'This offer is for new customers only.' 
-    //     });
-    // }
+    const isNew = await isNewCustomer(email);
+    if (!isNew) {
+        return res.status(400).json({ 
+            success: false,
+            message: 'This offer is for new customers only.' 
+        });
+    }
 
     // Build promotion payload - CORRECTED STRUCTURE
     let promotionPayload;
@@ -289,7 +289,8 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
                 {
                     action: {
                         shipping: {
-                            free_shipping: true
+                            free_shipping: true,
+                            zone_ids: []
                         }
                     },
                     condition: {
