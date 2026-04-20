@@ -295,11 +295,11 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
                         }
                     },
                     condition: {
-                        cart: {
-                                subtotal: {
-                                   minimum_spend: "100.00"
-                                }
-                        }
+         condition: {
+            cart: {
+                minimum_spend: "100.00" // ✅ CORRECT
+            }
+        },
                     },
                     apply_once: true,
                     stop: false
