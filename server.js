@@ -298,7 +298,7 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
                         cart: {
                             items: {
                                 subtotal: {
-                                    greater_than_or_equal_to: 100
+                                   minimum_spend: "100.00"
                                 }
                             }
                         }
@@ -326,11 +326,13 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
                         cart: {
                             items: {
                                 subtotal: {
-                                    greater_than_or_equal_to: 100
+                                    minimum_spend: "100.00"
                                 }
                             }
                         }
-                    }
+                    },
+                    apply_once: true,
+                    stop: false
                 }
             ]
         };
