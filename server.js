@@ -284,6 +284,7 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
         // Correct free shipping payload
         promotionPayload = {
             name: `Spin Wheel Prize: FREE SHIPPING for ${email}`,
+            redemption_type: "AUTOMATIC",
             status: "enabled",
             rules: [
                 {
