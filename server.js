@@ -285,13 +285,13 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
         promotionPayload = {
             name: `Spin Wheel Prize: FREE SHIPPING for ${email}`,
             redemption_type: "AUTOMATIC",
-            status: "enabled",
+            status: "ENABLED",
             rules: [
                 {
                     action: {
                         shipping: {
                             free_shipping: true,
-                            zone_ids: []
+                            zone_ids: "*"  // "*" means all shipping zones
                         }
                     },
                     condition: {
@@ -302,7 +302,9 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
                                 }
                             }
                         }
-                    }
+                    },
+                    apply_once: true,
+                    stop: false
                 }
             ]
         };
