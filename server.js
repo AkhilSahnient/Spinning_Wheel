@@ -23,8 +23,17 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
-const { BC_STORE_HASH, BC_API_TOKEN } = process.env;
+const { BC_STORE_HASH, BC_API_TOKEN, EMAIL_USER, EMAIL_PASS, STORE_URL } = process.env;
 const PORT = process.env.PORT || 3001;
+
+// Email configuration
+const transporter = nodemailer.createTransport({
+    service: 'gmail', // or 'hotmail', 'outlook', 'yahoo'
+    auth: {
+        user: EMAIL_USER,
+        pass: EMAIL_PASS
+    }
+});
 
 // BigCommerce API client
 const bigcommerceApi = axios.create({
@@ -38,6 +47,184 @@ const bigcommerceApi = axios.create({
 
 // Simple in-memory storage (use Redis/DB in production)
 const claimsStore = new Map();
+
+
+// Function to send winner email
+async function sendWinnerEmail(email, prize) {
+    const isFreeShipping = prize.toUpperCase().includes('FREE SHIPPING');
+    const discountAmount = isFreeShipping ? 'Free Shipping' : prize;
+    
+    const emailHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>You Won! 🎉</title>
+            <style>
+                body {
+                    font-family: Arial, sans-serif;
+                    line-height: 1.6;
+                    color: #333;
+                    max-width: 600px;
+                    margin: 0 auto;
+                    padding: 20px;
+                }
+                .header {
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    padding: 30px;
+                    text-align: center;
+                    border-radius: 10px 10px 0 0;
+                }
+                .header h1 {
+                    margin: 0;
+                    font-size: 28px;
+                }
+                .content {
+                    background: #f9f9f9;
+                    padding: 30px;
+                    border-radius: 0 0 10px 10px;
+                    border: 1px solid #e0e0e0;
+                    border-top: none;
+                }
+                .prize-box {
+                    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+                    color: white;
+                    padding: 20px;
+                    text-align: center;
+                    border-radius: 10px;
+                    margin: 20px 0;
+                    font-size: 28px;
+                    font-weight: bold;
+                }
+                .info-box {
+                    background: #fff;
+                    border: 2px solid #667eea;
+                    padding: 20px;
+                    border-radius: 10px;
+                    margin: 20px 0;
+                }
+                .button {
+                    display: inline-block;
+                    background: #667eea;
+                    color: white;
+                    padding: 12px 30px;
+                    text-decoration: none;
+                    border-radius: 5px;
+                    margin: 20px 0;
+                }
+                .button:hover {
+                    background: #5a67d8;
+                }
+                .footer {
+                    text-align: center;
+                    margin-top: 20px;
+                    font-size: 12px;
+                    color: #999;
+                }
+                .terms {
+                    font-size: 11px;
+                    color: #999;
+                    margin-top: 20px;
+                    text-align: center;
+                }
+                .checkmark {
+                    font-size: 50px;
+                    text-align: center;
+                    margin: 20px 0;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>🎉 Congratulations! 🎉</h1>
+                <p>You're a winner!</p>
+            </div>
+            <div class="content">
+                <p>Dear Valued Customer,</p>
+                
+                <p>Great news! You've won an amazing prize from our Spin & Win game:</p>
+                
+                <div class="prize-box">
+                    ${discountAmount}
+                </div>
+                
+                <div class="info-box">
+                    <h3 style="margin-top: 0;">✨ How to redeem:</h3>
+                    <p>Your ${prize} discount has been automatically applied to your account!</p>
+                    <p><strong>Simply:</strong></p>
+                    <ol>
+                        <li>Add items worth $100 or more to your cart</li>
+                        <li>Proceed to checkout</li>
+                        <li>Your discount will be applied automatically</li>
+                    </ol>
+                </div>
+                
+                <p><strong>Terms & Conditions:</strong></p>
+                <ul>
+                    <li>✓ Minimum purchase: $100</li>
+                    <li>✓ No expiry date (valid until used)</li>
+                    <li>✓ Works automatically when cart reaches $100+</li>
+                    <li>✓ Valid for B2C orders only</li>
+                    <li>✓ One-time use per customer</li>
+                </ul>
+                
+                <div style="text-align: center;">
+                    <a href="${STORE_URL}" class="button">🛍️ Shop Now & Save</a>
+                </div>
+                
+                <p>Happy Shopping!<br><strong>Team Sahnient</strong></p>
+            </div>
+            <div class="footer">
+                <p>This is an automated message, please do not reply.</p>
+                <div class="terms">
+                    *Terms apply. Cannot be combined with other offers. Valid for one-time use only.
+                </div>
+            </div>
+        </body>
+        </html>
+    `;
+    
+    const emailText = `
+        Congratulations! 🎉
+        
+        You won: ${prize}
+        
+        How to redeem:
+        - Add items worth $100 or more to your cart
+        - Proceed to checkout
+        - Your discount will be applied automatically
+        
+        Terms:
+        - Minimum purchase: $100
+        - No expiry date
+        - Valid for B2C orders only
+        
+        Shop now: ${STORE_URL}
+        
+        Thank you for playing!
+        Team Sahnient
+    `;
+    
+    const mailOptions = {
+        from: `"Sahnient Store" <${EMAIL_USER}>`,
+        to: email,
+        subject: `🎉 You Won ${prize} at Sahnient! 🎉`,
+        html: emailHtml,
+        text: emailText
+    };
+    
+    try {
+        const info = await transporter.sendMail(mailOptions);
+        console.log('Email sent to:', email, 'Message ID:', info.messageId);
+        return true;
+    } catch (error) {
+        console.error('Error sending email:', error);
+        return false;
+    }
+}
+
 
 // Check if user has claimed before
 async function checkUserClaimed(email) {
