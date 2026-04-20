@@ -1,6 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const dotenv = require('dotenv');
+const nodemailer = require('nodemailer');
 
 dotenv.config();
 
@@ -374,6 +375,9 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
         const response = await bigcommerceApi.post('/v3/promotions', promotionPayload);
 
         await storeClaim(email, prize, response.data.data?.id);
+        
+         // SEND EMAIL TO WINNER
+        const emailSent = await sendWinnerEmail(email, prize);
 
         res.json({
             success: true,
