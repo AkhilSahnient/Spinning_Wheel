@@ -296,7 +296,7 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
                     },
                     condition: {
                         cart: {
-                            minimum_spend: "100.00" // ✅ CORRECT
+                            minimum_spend: "100.00"
                         }
                     },
                     apply_once: true,
@@ -308,7 +308,7 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
         // Correct percentage discount payload
         promotionPayload = {
             name: `Spin Wheel Prize: ${prize} for ${email}`,
-            status: "enabled",
+            status: "ENABLED",
             rules: [
                 {
                     action: {
