@@ -312,16 +312,20 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
             status: "ENABLED",
             rules: [
                 {
-                action: {
-                    order: {
-                        discount: {
-                             percentage_amount: percentage
+                    action: {
+                        cart_items: {
+                            discount: {
+                                percentage_amount: Number(percentage)
+                            }
                         }
-                    }
-                },
+                    },
                     condition: {
                         cart: {
-                            minimum_spend: "100.00"
+                            items: {
+                                subtotal: {
+                                    minimum_spend: "100.00"
+                                }
+                            }
                         }
                     },
                     apply_once: true,
