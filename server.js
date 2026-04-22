@@ -315,7 +315,7 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
                 action: {
                     cart_items: {
                         discount: {
-                             percentage: percentage
+                             percentage_amount: percentage
                         }
                     }
                 },
