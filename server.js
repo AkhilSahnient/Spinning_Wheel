@@ -310,28 +310,25 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
             name: `Spin Wheel Prize: ${prize} for ${email}`,
             redemption_type: "AUTOMATIC",
             status: "ENABLED",
-            rules: [
-                {
-                    action: {
-                        cart_items: {
-                            discount: {
-                                percentage_amount: Number(percentage)
-                            }
-                        }
-                    },
-                    condition: {
-                        cart: {
-                            items: {
-                                subtotal: {
-                                    minimum_spend: "100.00"
-                                }
-                            }
-                        }
-                    },
-                    apply_once: true,
-                    stop: false
+    rules: [
+        {
+            action: {
+                cart_items: {
+                    discount: {
+                        percentage_amount: Number(percentage)
+                    }
                 }
-            ]
+        },
+
+    condition: {
+            cart: {
+                minimum_spend: "100.00"
+            }
+        },
+            apply_once: true,
+            stop: false
+        }
+    ]
         };
     }
 
