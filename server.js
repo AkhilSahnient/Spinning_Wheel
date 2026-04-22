@@ -308,6 +308,7 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
         // Correct percentage discount payload
         promotionPayload = {
             name: `Spin Wheel Prize: ${prize} for ${email}`,
+            redemption_type: "AUTOMATIC",
             status: "ENABLED",
             rules: [
                 {
