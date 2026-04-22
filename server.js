@@ -321,11 +321,7 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
                     },
                     condition: {
                         cart: {
-                            items: {
-                                subtotal: {
-                                    minimum_spend: "100.00"
-                                }
-                            }
+                            minimum_spend: "100.00"
                         }
                     },
                     apply_once: true,
@@ -335,7 +331,7 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
         };
     }
 
-    console.log('📤 Sending promotion payload:', JSON.stringify(promotionPayload, null, 2));
+    console.log('Sending promotion payload:', JSON.stringify(promotionPayload, null, 2));
 
     try {
         const response = await bigcommerceApi.post('/v3/promotions', promotionPayload);
