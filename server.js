@@ -312,13 +312,13 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
             status: "ENABLED",
             rules: [
                 {
-                    action: {
-                        cart: {
-                            discount: {
-                                percentage: percentage
-                            }
+                action: {
+                    cart_items: {
+                        discount: {
+                             percentage: percentage
                         }
-                    },
+                    }
+                },
                     condition: {
                         cart: {
                             minimum_spend: "100.00"
