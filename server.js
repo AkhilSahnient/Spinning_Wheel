@@ -235,8 +235,108 @@ async function isNewCustomer(email) {
     }
 }
 
+// In-memory OTP store
+const otpStore = new Map();
+
+// Generate and send OTP
+app.post('/api/spin-wheel/send-otp', async (req, res) => {
+    const { email } = req.body;
+
+    if (!email) {
+        return res.status(400).json({ error: 'Email is required' });
+    }
+
+    // Check if already claimed
+    if (claimsStore.has(email)) {
+        return res.status(400).json({
+            success: false,
+            message: 'This email has already claimed a prize.'
+        });
+    }
+
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+    // Store OTP
+    otpStore.set(email, { otp, expiresAt, verified: false });
+
+    // Send OTP email
+    const mailOptions = {
+        from: `"Awscale Store" <${EMAIL_USER}>`,
+        to: email,
+        subject: 'Your Verification Code - Spin & Win',
+        html: `
+            <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
+                <div style="background: linear-gradient(135deg, #1a3a6e, #0d1f3c); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+                    <h1 style="margin:0;">🎰 Spin & Win</h1>
+                    <p>Email Verification</p>
+                </div>
+                <div style="background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; border: 1px solid #e0e0e0;">
+                    <p>Your verification code is:</p>
+                    <div style="background: #1a3a6e; color: #c8a030; font-size: 36px; font-weight: bold; text-align: center; padding: 20px; border-radius: 10px; letter-spacing: 8px;">
+                        ${otp}
+                    </div>
+                    <p style="color: #999; font-size: 12px; margin-top: 20px;">
+                        This code expires in 10 minutes. Do not share it with anyone.
+                    </p>
+                </div>
+            </div>
+        `
+    };
+
+    try {
+        await transporter.sendMail(mailOptions);
+        console.log(`✅ OTP sent to ${email}: ${otp}`);
+        res.json({ success: true, message: 'Verification code sent to your email.' });
+    } catch (error) {
+        console.error('❌ OTP email error:', error.message);
+        res.status(500).json({ error: 'Failed to send verification email.' });
+    }
+});
+
+// Verify OTP
+app.post('/api/spin-wheel/verify-otp', async (req, res) => {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+        return res.status(400).json({ error: 'Email and OTP are required' });
+    }
+
+    const stored = otpStore.get(email);
+
+    if (!stored) {
+        return res.status(400).json({ error: 'No OTP found. Please request a new one.' });
+    }
+
+    if (Date.now() > stored.expiresAt) {
+        otpStore.delete(email);
+        return res.status(400).json({ error: 'OTP expired. Please request a new one.' });
+    }
+
+    if (stored.otp !== otp.toString()) {
+        return res.status(400).json({ error: 'Invalid OTP. Please try again.' });
+    }
+
+    // Mark as verified
+    otpStore.set(email, { ...stored, verified: true });
+    console.log(`✅ Email verified: ${email}`);
+
+    res.json({ success: true, message: 'Email verified successfully.' });
+});
+
+
 app.post('/api/spin-wheel/claim', async (req, res) => {
     const { email, prize } = req.body;
+
+        // ✅ Check OTP verified
+    const otpData = otpStore.get(email);
+    if (!otpData || !otpData.verified) {
+        return res.status(400).json({
+            success: false,
+            message: 'Email not verified. Please verify your email first.'
+        });
+    }
 
     console.log('📝 Claim request:', { email, prize });
 
@@ -320,11 +420,11 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
                 }
         },
 
-    condition: {
-            cart: {
-                minimum_spend: "100.00"
-            }
-        },
+        condition: {
+                cart: {
+                    minimum_spend: "100.00"
+                }
+            },
             apply_once: true,
             stop: false
         }
@@ -399,3 +499,4 @@ app.listen(PORT, () => {
     console.log(`✅ BigCommerce Store: ${BC_STORE_HASH}`);
     console.log(`✅ Email service ready`);
 });
+
