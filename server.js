@@ -238,7 +238,9 @@ async function isNewCustomer(email) {
 // In-memory OTP store
 const otpStore = new Map();
 
-// Generate and send OTP
+const { Resend } = require('resend');
+const resend = new Resend(process.env.RESEND_API_KEY);
+
 app.post('/api/spin-wheel/send-otp', async (req, res) => {
     const { email } = req.body;
 
@@ -246,7 +248,6 @@ app.post('/api/spin-wheel/send-otp', async (req, res) => {
         return res.status(400).json({ error: 'Email is required' });
     }
 
-    // Check if already claimed
     if (claimsStore.has(email)) {
         return res.status(400).json({
             success: false,
@@ -254,43 +255,40 @@ app.post('/api/spin-wheel/send-otp', async (req, res) => {
         });
     }
 
-    // Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+    const expiresAt = Date.now() + 10 * 60 * 1000;
 
-    // Store OTP
     otpStore.set(email, { otp, expiresAt, verified: false });
 
-    // Send OTP email
-    const mailOptions = {
-        from: `"Awscale Store" <${EMAIL_USER}>`,
-        to: email,
-        subject: 'Your Verification Code - Spin & Win',
-        html: `
-            <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
-                <div style="background: linear-gradient(135deg, #1a3a6e, #0d1f3c); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-                    <h1 style="margin:0;">🎰 Spin & Win</h1>
-                    <p>Email Verification</p>
-                </div>
-                <div style="background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; border: 1px solid #e0e0e0;">
-                    <p>Your verification code is:</p>
-                    <div style="background: #1a3a6e; color: #c8a030; font-size: 36px; font-weight: bold; text-align: center; padding: 20px; border-radius: 10px; letter-spacing: 8px;">
-                        ${otp}
-                    </div>
-                    <p style="color: #999; font-size: 12px; margin-top: 20px;">
-                        This code expires in 10 minutes. Do not share it with anyone.
-                    </p>
-                </div>
-            </div>
-        `
-    };
-
     try {
-        await transporter.sendMail(mailOptions);
+        await resend.emails.send({
+            from: 'onboarding@resend.dev', // ← sender (Resend test address)
+            to: email,                      // ← recipient (user's email)
+            subject: 'Your Verification Code - Spin & Win',
+            html: `
+                <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
+                    <div style="background: #1a3a6e; color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+                        <h1 style="margin:0;">🎰 Spin & Win</h1>
+                        <p>Email Verification</p>
+                    </div>
+                    <div style="background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; border: 1px solid #e0e0e0;">
+                        <p>Your verification code is:</p>
+                        <div style="background: #1a3a6e; color: #c8a030; font-size: 36px; font-weight: bold; text-align: center; padding: 20px; border-radius: 10px; letter-spacing: 8px;">
+                            ${otp}
+                        </div>
+                        <p style="color: #999; font-size: 12px; margin-top: 20px;">
+                            This code expires in 10 minutes.
+                        </p>
+                    </div>
+                </div>
+            `
+        });
+
         console.log(`✅ OTP sent to ${email}: ${otp}`);
         res.json({ success: true, message: 'Verification code sent to your email.' });
+
     } catch (error) {
-        console.error('❌ OTP email error:', error.message);
+        console.error('❌ Resend error:', error);
         res.status(500).json({ error: 'Failed to send verification email.' });
     }
 });
@@ -500,14 +498,3 @@ app.listen(PORT, () => {
     console.log(`✅ Email service ready`);
 });
 
-const { Resend } = require('resend');
-const resend = new Resend(process.env.RESEND_API_KEY);
-
-async function sendOTPEmail(email, otp) {
-    await resend.emails.send({
-        from: 'onboarding@resend.dev', // use this for testing
-        to: email,
-        subject: 'Your Verification Code - Spin & Win',
-        html: `<h2>Your OTP is: <strong>${otp}</strong></h2><p>Expires in 10 minutes.</p>`
-    });
-}
