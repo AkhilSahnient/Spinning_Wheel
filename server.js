@@ -500,3 +500,14 @@ app.listen(PORT, () => {
     console.log(`✅ Email service ready`);
 });
 
+const { Resend } = require('resend');
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+async function sendOTPEmail(email, otp) {
+    await resend.emails.send({
+        from: 'onboarding@resend.dev', // use this for testing
+        to: email,
+        subject: 'Your Verification Code - Spin & Win',
+        html: `<h2>Your OTP is: <strong>${otp}</strong></h2><p>Expires in 10 minutes.</p>`
+    });
+}
