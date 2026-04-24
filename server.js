@@ -1,7 +1,6 @@
 const express = require('express');
 const axios = require('axios');
 const dotenv = require('dotenv');
-const nodemailer = require('nodemailer');
 
 dotenv.config();
 
@@ -24,17 +23,9 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
-const { BC_STORE_HASH, BC_API_TOKEN, EMAIL_USER, EMAIL_PASS, STORE_URL } = process.env;
+const { BC_STORE_HASH, BC_API_TOKEN } = process.env;
 const PORT = process.env.PORT || 3001;
 
-// Email configuration
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: EMAIL_USER,
-        pass: EMAIL_PASS
-    }
-});
 
 // BigCommerce API client
 const bigcommerceApi = axios.create({
@@ -52,129 +43,79 @@ const claimsStore = new Map();
 // Function to send winner email
 async function sendWinnerEmail(email, prize) {
     const isFreeShipping = prize.toUpperCase().includes('FREE SHIPPING');
-    const discountAmount = isFreeShipping ? 'Free Shipping' : prize;
     
-    const emailHtml = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>You Won! 🎉</title>
-            <style>
-                body {
-                    font-family: Arial, sans-serif;
-                    line-height: 1.6;
-                    color: #333;
-                    max-width: 600px;
-                    margin: 0 auto;
-                    padding: 20px;
-                }
-                .header {
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    color: white;
-                    padding: 30px;
-                    text-align: center;
-                    border-radius: 10px 10px 0 0;
-                }
-                .header h1 {
-                    margin: 0;
-                    font-size: 28px;
-                }
-                .content {
-                    background: #f9f9f9;
-                    padding: 30px;
-                    border-radius: 0 0 10px 10px;
-                    border: 1px solid #e0e0e0;
-                    border-top: none;
-                }
-                .prize-box {
-                    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-                    color: white;
-                    padding: 20px;
-                    text-align: center;
-                    border-radius: 10px;
-                    margin: 20px 0;
-                    font-size: 28px;
-                    font-weight: bold;
-                }
-                .info-box {
-                    background: #fff;
-                    border: 2px solid #667eea;
-                    padding: 20px;
-                    border-radius: 10px;
-                    margin: 20px 0;
-                }
-                .button {
-                    display: inline-block;
-                    background: #667eea;
-                    color: white;
-                    padding: 12px 30px;
-                    text-decoration: none;
-                    border-radius: 5px;
-                    margin: 20px 0;
-                }
-                .footer {
-                    text-align: center;
-                    margin-top: 20px;
-                    font-size: 12px;
-                    color: #999;
-                }
-            </style>
-        </head>
-        <body>
-            <div class="header">
-                <h1>🎉 Congratulations! 🎉</h1>
-                <p>You're a winner!</p>
-            </div>
-            <div class="content">
-                <p>Dear Valued Customer,</p>
-                <p>Great news! You've won an amazing prize from our Spin & Win game:</p>
-                <div class="prize-box">
-                    ${discountAmount}
-                </div>
-                <div class="info-box">
-                    <h3>✨ How to redeem:</h3>
-                    <p>Your ${prize} discount has been automatically applied to your account!</p>
-                    <p><strong>Simply:</strong></p>
-                    <ol>
-                        <li>Add items worth $100 or more to your cart</li>
-                        <li>Proceed to checkout</li>
-                        <li>Your discount will be applied automatically</li>
-                    </ol>
-                </div>
-                <p><strong>Terms & Conditions:</strong></p>
-                <ul>
-                    <li>✓ Minimum purchase: $100</li>
-                    <li>✓ No expiry date (valid until used)</li>
-                    <li>✓ Works automatically when cart reaches $100+</li>
-                    <li>✓ Valid for B2C orders only</li>
-                </ul>
-                <div style="text-align: center;">
-                    <a href="${STORE_URL}" class="button">🛍️ Shop Now & Save</a>
-                </div>
-                <p>Happy Shopping!<br><strong>Team Sahnient</strong></p>
-            </div>
-            <div class="footer">
-                <p>This is an automated message, please do not reply.</p>
-            </div>
-        </body>
-        </html>
-    `;
-    
-    const mailOptions = {
-        from: `"Sahnient Store" <${EMAIL_USER}>`,
-        to: email,
-        subject: `You Won ${prize} at Awscale!`,
-        html: emailHtml
-    };
-    
+    const prizeDisplay = isFreeShipping ? 'FREE SHIPPING' : prize;
+    const description = isFreeShipping 
+        ? 'Free shipping will be applied automatically at checkout on orders over $100.'
+        : `You get ${prize} off your order subtotal automatically at checkout on orders over $100.`;
+
     try {
-        const info = await transporter.sendMail(mailOptions);
-        console.log('✅ Email sent to:', email);
+        await resend.emails.send({
+            from: 'onboarding@resend.dev',
+            to: email,
+            subject: `🎉 You Won ${prizeDisplay} at AWScales!`,
+            html: `
+                <!DOCTYPE html>
+                <html>
+                <body style="font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f4f4f4;">
+                    <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+                        
+                        <div style="background: linear-gradient(135deg, #1a3a6e, #0d1f3c); color: white; padding: 40px 30px; text-align: center; border-radius: 12px 12px 0 0;">
+                            <h1 style="margin: 0; font-size: 32px;">🎉 Congratulations!</h1>
+                            <p style="margin: 10px 0 0; opacity: 0.8;">You're a winner at AWScales Spin & Win!</p>
+                        </div>
+
+                        <div style="background: white; padding: 30px; text-align: center; border-left: 1px solid #e0e0e0; border-right: 1px solid #e0e0e0;">
+                            <p style="color: #666; font-size: 16px; margin: 0 0 16px;">Your prize:</p>
+                            <div style="background: linear-gradient(135deg, #c8a030, #e6b422); color: white; font-size: 36px; font-weight: bold; padding: 24px; border-radius: 12px; letter-spacing: 2px;">
+                                ${prizeDisplay}
+                            </div>
+                            <p style="color: #444; font-size: 16px; margin: 20px 0 0; line-height: 1.6;">
+                                ${description}
+                            </p>
+                        </div>
+
+                        <div style="background: #f8f9ff; padding: 30px; border-left: 1px solid #e0e0e0; border-right: 1px solid #e0e0e0;">
+                            <h3 style="color: #1a3a6e; margin: 0 0 16px;">✨ How to redeem:</h3>
+                            <ol style="color: #444; line-height: 2; margin: 0; padding-left: 20px;">
+                                <li>Visit <a href="${STORE_URL}" style="color: #c8a030;">AWScales Store</a></li>
+                                <li>Add items worth <strong>$100 or more</strong> to your cart</li>
+                                <li>Proceed to checkout</li>
+                                <li>Your discount applies <strong>automatically!</strong></li>
+                            </ol>
+                        </div>
+
+                        <div style="background: white; padding: 20px 30px; border-left: 1px solid #e0e0e0; border-right: 1px solid #e0e0e0;">
+                            <h4 style="color: #666; margin: 0 0 10px; font-size: 14px;">Terms & Conditions:</h4>
+                            <ul style="color: #999; font-size: 13px; line-height: 1.8; margin: 0; padding-left: 20px;">
+                                <li>Minimum purchase: $100</li>
+                                <li>Valid on B2C orders only</li>
+                                <li>No expiry — valid until used</li>
+                                <li>One prize per customer</li>
+                            </ul>
+                        </div>
+
+                        <div style="background: white; padding: 20px 30px 30px; text-align: center; border-left: 1px solid #e0e0e0; border-right: 1px solid #e0e0e0; border-radius: 0 0 12px 12px; border-bottom: 1px solid #e0e0e0;">
+                            <a href="${STORE_URL}" style="display: inline-block; background: linear-gradient(135deg, #1a3a6e, #0d1f3c); color: white; padding: 16px 40px; border-radius: 50px; text-decoration: none; font-size: 16px; font-weight: bold;">
+                                🛍️ Shop Now & Save
+                            </a>
+                        </div>
+
+                        <div style="text-align: center; padding: 20px; color: #999; font-size: 12px;">
+                            <p style="margin: 0;">© 2026 AWScales. All rights reserved.</p>
+                            <p style="margin: 4px 0 0;">This is an automated message, please do not reply.</p>
+                        </div>
+
+                    </div>
+                </body>
+                </html>
+            `
+        });
+
+        console.log(`✅ Winner email sent to: ${email}`);
         return true;
     } catch (error) {
-        console.error('❌ Error sending email:', error.message);
+        console.error('❌ Winner email error:', error);
         return false;
     }
 }
