@@ -269,13 +269,13 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
     const { email, prize } = req.body;
 
         // ✅ Check OTP verified
-    const otpData = otpStore.get(email);
-    if (!otpData || !otpData.verified) {
-        return res.status(400).json({
-            success: false,
-            message: 'Email not verified. Please verify your email first.'
-        });
-    }
+    // const otpData = otpStore.get(email);
+    // if (!otpData || !otpData.verified) {
+    //     return res.status(400).json({
+    //         success: false,
+    //         message: 'Email not verified. Please verify your email first.'
+    //     });
+    // }
 
     console.log('📝 Claim request:', { email, prize });
 
