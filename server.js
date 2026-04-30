@@ -23,7 +23,8 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
-const { BC_STORE_HASH, BC_API_TOKEN } = process.env;
+
+const { BC_STORE_HASH, BC_API_TOKEN, STORE_URL } = process.env;
 const PORT = process.env.PORT || 3001;
 
 
@@ -51,7 +52,7 @@ async function sendWinnerEmail(email, prize) {
 
     try {
         await resend.emails.send({
-            from: 'onboarding@resend.dev',
+            from: 'osales@awscales.com',
             to: email,
             subject: `🎉 You Won ${prizeDisplay} at AWScales!`,
             html: `
@@ -203,7 +204,7 @@ app.post('/api/spin-wheel/send-otp', async (req, res) => {
 
     try {
         await resend.emails.send({
-            from: 'onboarding@resend.dev', // ← sender (Resend test address)
+            from: 'sales@awscales.com', // ← sender (Resend test address)
             to: email,                      // ← recipient (user's email)
             subject: 'Your Verification Code - Spin & Win',
             html: `
@@ -269,13 +270,13 @@ app.post('/api/spin-wheel/claim', async (req, res) => {
     const { email, prize } = req.body;
 
         // ✅ Check OTP verified
-    // const otpData = otpStore.get(email);
-    // if (!otpData || !otpData.verified) {
-    //     return res.status(400).json({
-    //         success: false,
-    //         message: 'Email not verified. Please verify your email first.'
-    //     });
-    // }
+    const otpData = otpStore.get(email);
+    if (!otpData || !otpData.verified) {
+        return res.status(400).json({
+            success: false,
+            message: 'Email not verified. Please verify your email first.'
+        });
+    }
 
     console.log('📝 Claim request:', { email, prize });
 
@@ -438,4 +439,8 @@ app.listen(PORT, () => {
     console.log(`✅ BigCommerce Store: ${BC_STORE_HASH}`);
     console.log(`✅ Email service ready`);
 });
+
+
+
+
 
